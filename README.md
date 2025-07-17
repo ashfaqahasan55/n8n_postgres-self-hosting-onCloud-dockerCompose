@@ -1,52 +1,190 @@
-# Self-Hosting SSL enabled N8N on a Linux Server
+# Self-Hosting SSL enabled N8N on a Linux Server with docker compose
 
-This guide provides step-by-step instructions to self-host [n8n](https://n8n.io), a free and open-source workflow automation tool, on a Linux server using Docker, Nginx, and Certbot for SSL with a custom domain name.
-
-Youtube Video Explanation: https://www.youtube.com/watch?v=Temh_Ddxp24
-![Screenshot 2024-08-03 125607](https://github.com/user-attachments/assets/908eaaf2-d66f-446e-8dd8-a3676da2bc89)
+This guide provides step-by-step instructions to self-host [n8n](https://n8n.io), a free and open-source workflow automation tool, on a Linux server using Docker compose, Nginx, and Certbot for SSL with a custom domain name.
 
 
-## Step 1: Installing Docker
 
-1. **Update the Package Index:**
-   ```bash
-   sudo apt update
+## Step 1: Installing Docker and Docker compose
 
-2. **Install Docker:**
+1. **Set up Docker’s apt repository:**
+```bash
+    # Add dockers official GPG key:
+    sudo apt-get update
+    sudo apt-get install ca-certificates curl gnupg
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+    # Add the repository to Apt sources:
+    echo \
+    "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+    sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt-get update 
+ ```
+
+2. **Install the latest version:**
     ```bash
-    sudo apt install docker.io
-
-3.  **Start Docker:**
-    ```bash
-    sudo systemctl start docker
-
-4. **Enable Docker to Start at Boot:**
-    ```bash
-    sudo systemctl enable docker
-
-
-## Step 2: Starting n8n in Docker
-
-Run the following command to start n8n in Docker. Replace your-domain.com with your actual domain name:
-
-    ```bash
-    sudo docker run -d --restart unless-stopped -it --name n8n -p 5678:5678 -e N8N_HOST=0.0.0.0 -e N8N_PORT=5678 -e N8N_EDITOR_BASE_URL="your-domain.com" -e WEBHOOK_TUNNEL_URL="your-domain.comk/" -e WEBHOOK_URL="your-domain.com" -e N8N_SECURE_COOKIE=false -e N8N_RUNNERS_ENABLED=true -v ~/.n8n:/root/.n8n n8nio/n8n
+    sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     ```
 
-Or if you are using a subdomain, it should look like this:
-
+3. **check the docker version:**
     ```bash
-    sudo docker run -d --restart unless-stopped -it --name n8n -p 5678:5678 -e N8N_HOST=0.0.0.0 -e N8N_PORT=5678 -e N8N_EDITOR_BASE_URL="your-subdomain.com" -e WEBHOOK_TUNNEL_URL="your-subdomain.com/" -e WEBHOOK_URL="your-subdomain.com" -e N8N_SECURE_COOKIE=false -e N8N_RUNNERS_ENABLED=true -v ~/.n8n:/root/.n8n n8nio/n8n
+    docker -v
     ```
+    If that returns a version, you’re good to go.
+
+4. **check the docker version:**
+    ```bash
+    sudo docker compose
+    ```
+    If that returns al the commands help, you’re good to go.
+    
 
 
-This command does the following:
+## Step 2: Setting up
 
-- Downloads and runs the n8n Docker image.
-- Exposes n8n on port 5678.
-- Sets environment variables for the n8n host and webhook tunnel URL.
-- Mounts the n8n data directory for persistent storage.
-- After executing the command, n8n will be accessible on your-domain.com:5678.
+1. **Create the Project Folder:**
+
+    I like to keep things organized under /opt/stacks, but you can adjust this to fit your structure:
+
+```bash
+    sudo mkdir -p /opt/stacks/n8n
+    sudo chown "username":"username" -R /opt/stacks
+    cd /opt/stacks/n8n
+```
+    Replace "username" with your instance username. In my case it's "ubuntu".
+
+
+2. **Create the Docker Compose File**
+
+```bash
+    sudo nano compose.yaml
+```
+
+    Then paste the following yaml:
+```bash
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: always
+    ports:
+    - "5678:5678"
+    env_file:
+    - .env
+    volumes:
+    - ./data:/home/node/.n8n
+    - ./files:/files
+    depends_on:
+    - postgres
+    # labels:
+    # - "traefik.enable=true"
+    # - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.rule=Host(`${TRAEFIK_DOMAIN}`)"
+    # - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.entrypoints=websecure"
+    # - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls.certresolver=${TRAEFIK_CERT_RESOLVER}"
+    # - "traefik.http.services.${TRAEFIK_ROUTER_NAME}.loadbalancer.server.port=5678"
+
+# If you're running your own external PostgreSQL instance, you can comment out this service
+  postgres:
+    image: postgres:15
+    restart: always
+    env_file:
+    - .env
+    volumes:
+    - ./postgres-data:/var/lib/postgresql/data
+        
+```
+
+     This gives us a working setup using Docker Compose, with support for environment variables, volumes for persistence, and optional Traefik labels if you want to enable TLS down the line.
+
+
+3. **Create .env file:**
+
+```bash
+    sudo nano .env
+```
+    Paste in your values:
+```bash
+# n8n Settings
+DOMAIN_NAME=peachsoft.co.uk #replace with your-domain name or server public ip
+SUBDOMAIN=optiforgeai #replace it with your subdomain if you have, if not just ease this variable
+GENERIC_TIMEZONE=Europe/London
+N8N_HOST=optiforgeai.peachsoft.co.uk  #subdomain.your-domain.com
+N8N_PROTOCOL=https. #if not hosting globally erase it out
+WEBHOOK_URL=https://optiforgeai.peachsoft.co.uk #url for subdomain.your-domain.com (its webhook url for tools to connect globally with other services)
+N8N_SECURE_COOKIE=false
+N8N_PORT=5678
+N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+N8N_RUNNERS_ENABLED=true
+NODE_ENV=production
+
+# n8n Database Settings (for the n8n application itself)
+DB_POSTGRES_HOST=postgres
+DB_POSTGRES_PORT=5432
+DB_POSTGRES_DATABASE=postgres # You can choose your n8n database name
+DB_POSTGRES_USER=postgres # You can choose your n8n database user
+DB_POSTGRES_PASSWORD=ubuntu #change it with a strong pass
+
+# PostgreSQL Container Settings (for the postgres service)
+# These are used by the 'postgres' service's entrypoint to configure the database
+POSTGRES_DB=${DB_POSTGRES_DATABASE}
+POSTGRES_USER=${DB_POSTGRES_USER}
+POSTGRES_PASSWORD=${DB_POSTGRES_PASSWORD} # CRITICAL: Must match the n8n DB password
+
+# Optional: Traefik (if you plan to use it for reverse proxying directly via Docker)
+# TRAEFIK_ROUTER_NAME=optiforgeai
+# TRAEFIK_DOMAIN=${SUBDOMAIN_NAME}.${DOMAIN_NAME}
+# TRAEFIK_CERT_RESOLVER=mytlschallenge
+```
+
+If not postgresdb not working, try to remove the postgres volume folder to start from the begining.
+```bash
+sudo rm -rf postgres-data
+mkdir postgres-data
+```
+
+
+    
+
+4. **Starting the stack**
+Navigate to your project directory:
+```bash
+  cd /opt/stacks/n8n
+```
+
+make folder /data:
+```bash
+sudo mkdir /opt/stacks/n8n/data
+```
+make folder /files:
+```bash
+sudo mkdir /opt/stacks/n8n/files
+```
+
+Then bring everything up in the background:
+```bash
+sudo docker compose up -d
+
+```
+5. **Confirm It’s Running**
+To confirm everything started correctly, run:
+```bash
+  sudo docker ps
+```
+You should see both the n8n and postgres containers listed and running. If not, check the logs with:
+```bash
+sudo docker compose logs
+```
+At this point your n8n is accessible locally via port 5678. You will get all the logs and at the end of the logs you can see something like this:
+n8n-1       | Editor is now accessible via:
+n8n-1       | https://n8n.retaliate.co.uk
+n8n-1       | Registered runner "JS Task Runner" (wYVjeHFj5qPSRT6h7BmkF)
+
+The n8n is now accessible via {your domain name or ip address} with port 5678.
+In may case it's n8n.retaliate.co.uk:5678
+Hold on! still not globally hosted with ssl link. Take a break. Drink coffee, tea. Then proceed to the next section.
+
+
 
 ## Step 3: Installing Nginx
 
@@ -68,7 +206,7 @@ Configure Nginx to reverse proxy the n8n web interface:
     ```bash
     server {
     listen 80;
-    server_name our-domain.com;
+    server_name our-domain.com; #change it with your submain-domain name(in my case: n8n.retaliate.co.uk)
 
     location / {
         proxy_pass http://localhost:5678; # Or http://127.0.0.1:5678
@@ -82,8 +220,9 @@ Configure Nginx to reverse proxy the n8n web interface:
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400s; # Long timeout for WebSockets
+
+         }
     }
-}
     ```
     Replace your-domain.com with your actual domain.
 
@@ -93,19 +232,13 @@ Configure Nginx to reverse proxy the n8n web interface:
 
     If you see the error saying /etc/nginx/sites-enabled/ doesn't exist. Create it by running: sudo mkdir /etc/nginx/sites-enabled/
 
-4. **Test the Nginx Configuration and Restart:**
+4. **Test the Nginx Configuration, Delete the default, and Restart:**
     ```bash
     sudo nginx -t
+    sudo rm /etc/nginx/sites-enabled/default
     sudo systemctl restart nginx
     ```
 
-5. **Delete the default if not working**
-    ```bash
-    sudo rm /etc/nginx/sites-enabled/default
-    sudo ufw allow 80/tcp
-    sudo ufw allow 5678/tcp
-    sudo ufw enable
-    ```
 
 ## Step 5: Setting up SSL with Certbot
 
@@ -138,7 +271,7 @@ Ensure that your n8n instance is using a persistent volume or a mapped directory
 In your docker-compose.yml, you should have something like this:
 ```bash
 volumes:
-- ~/.n8n:/home/node/.n8n
+- /data:/home/node/.n8n
 ```
 
 This mapping ensures that the .n8n directory on your host machine is used for data storage, preserving your workflows and configurations across container updates.
