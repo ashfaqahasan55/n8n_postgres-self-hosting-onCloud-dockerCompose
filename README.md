@@ -239,6 +239,20 @@ Configure Nginx to reverse proxy the n8n web interface:
     sudo systemctl restart nginx
     ```
 
+5. **Some cloud services e.g. oracle cloud blocks traffice using IPTABLES. To fix it:**
+    for TCP 80:
+    ```bash
+   sudo iptables -I INPUT 4 -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
+    ```
+    for TCP 443
+    ```bash
+   sudo iptables -I INPUT 5 -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
+    ```
+    then save:
+    ```bash
+   sudo netfilter-persistent save
+    ```
+
 
 ## Step 5: Setting up SSL with Certbot
 
